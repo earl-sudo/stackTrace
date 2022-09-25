@@ -28,14 +28,16 @@ constexpr inline uint64_t fnv1_64(const void* data, size_t nbytes) {
 }
 
 struct SafeStackTrace {
-    inline static const size_t nMaxFrame_      = 128;
-    int                        nFrames_        = 0;
-    int                        numFramesQuery_ = 0;
-    void* callStackPtrs_[nMaxFrame_] = {nullptr};
+    inline static const size_t  nMaxFrame_      = 128;
+    int                         nFrames_        = 0;
+    int                         numFramesQuery_ = 0;
+    void*                       callStackPtrs_[nMaxFrame_] = {nullptr};
+
     SafeStackTrace() { generate(); }
     SafeStackTrace(const SafeStackTrace& lhs) = default;
     SafeStackTrace(SafeStackTrace&& lhs) = default;
     ~SafeStackTrace() = default;
+
     uint64_t hash() {
         return fnv1_64((const char*)callStackPtrs_, sizeof(void*) * numFramesQuery_);
     }
@@ -44,7 +46,7 @@ struct SafeStackTrace {
         nFrames_        = ::backtrace(callStackPtrs_, nMaxFrame_);
         numFramesQuery_ = std::min(nFrames_, (int)nMaxFrame_);
     }
-    std::ostream& print(std::ostream& strm) noexcept {
+    std::ostream& print(std::ostream& strm) const noexcept {
         if (nFrames_ == 0) { return strm; }
         char** symbols = ::backtrace_symbols(callStackPtrs_, numFramesQuery_);
         if (symbols != nullptr) {
@@ -55,19 +57,21 @@ struct SafeStackTrace {
         delete symbols;
         return strm;
     }
+    friend std::ostream &operator<<( std::ostream &strm, const SafeStackTrace &safeStackTrace ) {
+        return safeStackTrace.print(strm);
+    }
 };
 
 struct ShowPath {
-    bool                   noisy_{false};
-    bool                   showStackTrace_{true};
-    static bool            globalShowStackTrace_;
-    mutable SafeStackTrace saveStackTrace_;
-    std::string            name_;
-    uint64_t               nameId_{0};
-    char                   nameIdStr_[32];
-    mutable int            numCalls_{0}
-    ;
-    mutable std::map<uint64_t, int>  uniquePaths_;
+    bool                            noisy_{false};
+    bool                            showStackTrace_{true};
+    static bool                     globalShowStackTrace_;
+    mutable SafeStackTrace          saveStackTrace_;
+    std::string                     name_;
+    uint64_t                        nameId_{0};
+    char                            nameIdStr_[32];
+    mutable int                     numCalls_{0};
+    mutable std::map<uint64_t, int> uniquePaths_;
 
     explicit ShowPath(std::string_view name, bool noisyD = false) : name_(name), noisy_(noisyD) {
         nameId_ = fnv1_64(name_.c_str(), name_.size());
@@ -83,7 +87,7 @@ struct ShowPath {
             auto iter = uniquePaths_.find(hash);
             if (iter == uniquePaths_.end()) {
                 std::cerr << "ShowPath-BEGIN: " << nameIdStr_ << " -(" << name_ << ")- NumPaths:" << uniquePaths_.size() << " NumCalls:" << numCalls_  << std::endl;
-                saveStackTrace_.print(std::cerr);
+                std::cerr << saveStackTrace_;
                 std::cerr << "ShowPath-END__: " << nameIdStr_ << " -(" << name_ << ")- NumPaths:"  << std::endl;
             } else {
                 iter->second++;
