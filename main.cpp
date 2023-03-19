@@ -63,8 +63,8 @@ struct SafeStackTrace {
 };
 
 struct ShowPath {
-    bool                            noisy_{false};
-    bool                            showStackTrace_{true};
+    mutable bool                    noisy_{false};
+    mutable bool                    showStackTrace_{true};
     static bool                     globalShowStackTrace_;
     mutable SafeStackTrace          saveStackTrace_;
     std::string                     name_;
@@ -72,6 +72,7 @@ struct ShowPath {
     char                            nameIdStr_[32];
     mutable int                     numCalls_{0};
     mutable std::map<uint64_t, int> uniquePaths_;
+    mutable bool                    thisIsUniquePath_{false};
 
     explicit ShowPath(std::string_view name, bool noisyD = false) : name_(name), noisy_(noisyD) {
         nameId_ = fnv1_64(name_.c_str(), name_.size());
@@ -81,11 +82,13 @@ struct ShowPath {
     void generate(std::mutex& mtx) const {
         if (globalShowStackTrace_ && showStackTrace_) {
             std::unique_lock<std::mutex>	lock(mtx);
+            thisIsUniquePath_ = false;
             numCalls_++;
             saveStackTrace_.generate();
             auto hash = saveStackTrace_.hash();
             auto iter = uniquePaths_.find(hash);
             if (iter == uniquePaths_.end()) {
+                thisIsUniquePath_ = true;
                 std::cerr << "ShowPath-BEGIN: " << nameIdStr_ << " -(" << name_ << ")- NumPaths:" << uniquePaths_.size() << " NumCalls:" << numCalls_  << std::endl;
                 std::cerr << saveStackTrace_;
                 std::cerr << "ShowPath-END__: " << nameIdStr_ << " -(" << name_ << ")- NumPaths:"  << std::endl;
@@ -111,8 +114,22 @@ bool ShowPath::globalShowStackTrace_ = true;
 
 #include <iostream>
 
+struct AClass {
+    void aMethod1() { SHOWPATH(__PRETTY_FUNCTION__); }
+    void aMethod2() const { SHOWPATH(__PRETTY_FUNCTION__); }
+};
+void aFuntion() {
+    SHOWPATH(__PRETTY_FUNCTION__);
+
+}
+
+
 int main() {
     std::cout << "Hello, World!" << std::endl;
     SHOWPATH(__PRETTY_FUNCTION__);
+    AClass aClass;
+    aFuntion();
+    aClass.aMethod1();
+    aClass.aMethod2();
     return 0;
 }
